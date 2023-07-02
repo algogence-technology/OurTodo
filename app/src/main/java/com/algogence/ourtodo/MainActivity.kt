@@ -1,8 +1,9 @@
 package com.algogence.ourtodo
 
-import android.app.Activity
+import android.app.DatePickerDialog
 import android.content.Context
 import android.os.Bundle
+import android.widget.DatePicker
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.animateColorAsState
@@ -35,7 +36,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -46,6 +49,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,17 +85,22 @@ import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.algogence.ourtodo.database.AppDatabase
+import com.algogence.ourtodo.database.MyTasks
 import com.algogence.ourtodo.mypackage.Task
 import com.algogence.ourtodo.ui.theme.OurTodoTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Calendar
+import java.util.Date
 
 class MainActivity : ComponentActivity() {
-
-    val iid = mutableStateOf(0)
-    val store = mutableStateListOf<Task>()
+    private val pending = mutableStateOf(true)
+    private val context: Context by lazy{ this }
+    private val sharedPreferences: MySharedPreferences by lazy{ MySharedPreferences(context) }
+    private val iid = mutableStateOf(0)
+    private val store = mutableStateListOf<Task>()
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -118,11 +127,10 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SplashPage(navController: NavHostController) {
-        val context = LocalContext.current
+        //val context = LocalContext.current
         LaunchedEffect(key1 = Unit){
             delay(1700)
-            val sharedPref = (context as Activity).getPreferences(Context.MODE_PRIVATE)
-            val introDone = sharedPref.getBoolean("introDone", false)
+            val introDone = sharedPreferences.getBoolean("introDone",false)
             if(introDone){
                 navController.navigate("home")
             }
@@ -213,11 +221,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveIntroDone(context: Context) {
-        val sharedPref = (context as Activity).getPreferences(Context.MODE_PRIVATE)
+        /*val sharedPref = (context as Activity).getPreferences(Context.MODE_PRIVATE)
         with (sharedPref.edit()) {
             putBoolean("introDone", true)
             apply()
-        }
+        }*/
+        MySharedPreferences(context).addBoolean("introDone", true)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -226,133 +235,178 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
         ) {
-            var title by remember {
-                mutableStateOf("")
-            }
-            var description by remember {
-                mutableStateOf("")
-            }
-            // true and true = true
-            // false and true = false
-            // false and false = false
-            // true and false = false
-            val canProceed by remember {
-                derivedStateOf {
-                    title.isNotEmpty() && description.isNotEmpty()
-                }
-            }
-            Text(
-                text = "New Task",
-                fontWeight = FontWeight.Bold,
-                color = Color(0xff246BFE)
-            )
-
-            OutlinedTextField(
+            Row(
                 modifier = Modifier
-                    .width(320.dp)
-                    .padding(top = 20.dp)
-                    .border(BorderStroke(1.dp, SolidColor(Color.Black))),
-                colors = TextFieldDefaults
-                    .textFieldColors(
-                        containerColor = Color.White,
-                        textColor = Color.Gray,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                value = title,
-                onValueChange = {
-                    title = it
-                },
-                textStyle = TextStyle(
-                    fontWeight = FontWeight.Bold
-                ),
-                placeholder = {
-                    Text("Title")
-                }
-            )
-
-            OutlinedTextField(
-                modifier = Modifier
-                    .width(320.dp)
-                    .height(200.dp)
-                    .padding(top = 20.dp)
-                    .border(BorderStroke(1.dp, SolidColor(Color.Black))),
-                colors = TextFieldDefaults
-                    .textFieldColors(
-                        containerColor = Color.White,
-                        textColor = Color.Gray,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                value = description,
-                onValueChange = {
-                    description = it
-                },
-                textStyle = TextStyle(
-                    fontWeight = FontWeight.Bold
-                ),
-                placeholder = {
-                    Text("Description")
-                }
-            )
-            val scope = rememberCoroutineScope()
-            Button(
-                enabled = canProceed,
-                modifier = Modifier
-                    .padding(horizontal = 36.dp)
-                    .fillMaxWidth()
-                    .height(70.dp)
-                    .padding(top = 20.dp),
-                onClick = {
-                    //store.add(Task(++iid.value, title, description))
-                    scope.launch(Dispatchers.IO) {
-                        saveTaskToDatabase(Task(++iid.value, title, description))
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ){
+                IconButton(
+                    onClick = {
+                        navController.popBackStack()
                     }
-
-                    navController.popBackStack()
-                },
-                shape = RoundedCornerShape(30.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF457EF5)
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = ""
+                    )
+                }
+                Text("New Task")
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.White),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
+
+                var title by remember {
+                    mutableStateOf("")
+                }
+                var description by remember {
+                    mutableStateOf("")
+                }
+                val canProceed by remember {
+                    derivedStateOf {
+                        title.isNotEmpty() && description.isNotEmpty()
+                    }
+                }
                 Text(
-                    text = "Add",
+                    text = "New Task",
                     fontWeight = FontWeight.Bold,
+                    color = Color(0xff246BFE)
                 )
+
+                OutlinedTextField(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .padding(top = 20.dp)
+                        .border(BorderStroke(1.dp, SolidColor(Color.Black))),
+                    colors = TextFieldDefaults
+                        .textFieldColors(
+                            containerColor = Color.White,
+                            textColor = Color.Gray,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                    value = title,
+                    onValueChange = {
+                        title = it
+                    },
+                    textStyle = TextStyle(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    placeholder = {
+                        Text("Title")
+                    }
+                )
+
+                OutlinedTextField(
+                    modifier = Modifier
+                        .width(320.dp)
+                        .height(200.dp)
+                        .padding(top = 20.dp)
+                        .border(BorderStroke(1.dp, SolidColor(Color.Black))),
+                    colors = TextFieldDefaults
+                        .textFieldColors(
+                            containerColor = Color.White,
+                            textColor = Color.Gray,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                    value = description,
+                    onValueChange = {
+                        description = it
+                    },
+                    textStyle = TextStyle(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    placeholder = {
+                        Text("Description")
+                    }
+                )
+                val scope = rememberCoroutineScope()
+                var mDate by remember { mutableStateOf("") }
+                val mContext = LocalContext.current
+                Row(
+                    modifier = Modifier
+                        .width(320.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ){
+                    IconButton(
+                        onClick = {
+                            val mYear: Int
+                            val mMonth: Int
+                            val mDay: Int
+                            val mCalendar = Calendar.getInstance()
+                            val parts = mDate.split("/")//02/07/2023
+                            if(parts.size==3){
+                                mDay = parts[0].toInt()
+                                mMonth = parts[1].toInt()-1
+                                mYear = parts[2].toInt()
+                            }
+                            else{
+                                mYear = mCalendar.get(Calendar.YEAR)
+                                mMonth = mCalendar.get(Calendar.MONTH)
+                                mDay = mCalendar.get(Calendar.DAY_OF_MONTH)
+                            }
+
+                            mCalendar.time = Date()
+                            val mDatePickerDialog = DatePickerDialog(
+                                mContext,
+                                { _: DatePicker, mYear: Int, mMonth: Int, mDayOfMonth: Int ->
+                                    mDate = "$mDayOfMonth/${mMonth+1}/$mYear"
+                                }, mYear, mMonth, mDay
+                            )
+
+                            mDatePickerDialog.show()
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Outlined.CalendarMonth, contentDescription = "")
+                    }
+                    Text(mDate)
+                }
+                Button(
+                    enabled = canProceed,
+                    modifier = Modifier
+                        .padding(horizontal = 36.dp)
+                        .fillMaxWidth()
+                        .height(70.dp)
+                        .padding(top = 20.dp),
+                    onClick = {
+                        //store.add(Task(++iid.value, title, description))
+                        scope.launch(Dispatchers.IO) {
+                            saveTaskToDatabase(Task(++iid.value, title, description,mDate))
+                        }
+
+                        navController.popBackStack()
+                    },
+                    shape = RoundedCornerShape(30.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF457EF5)
+                    )
+                ) {
+                    Text(
+                        text = "Add",
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                }
+
 
             }
         }
+
     }
 
     private fun saveTaskToDatabase(task: Task) {
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java, "taskDatabase"
-        ).build()
-
-        val taskDao = db.taskDao()
-        val dbTask = com.algogence.ourtodo.database.Task(
-            title = task.title,
-            description = task.description,
-            date = "02-07-2023",
-            done = false
-        )
-        taskDao.insert(dbTask)
+        MyTasks(applicationContext).insert(task)
     }
 
-    private fun getTasksDatabase(): List<Task> {
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java, "taskDatabase"
-        ).build()
-
-        val taskDao = db.taskDao()
-        val dbTasks = taskDao.getAll()
-        return dbTasks.map {
-            Task(it.id,it.title,it.description)
+    private fun getTasksFromDatabase(): List<Task> {
+        return if(pending.value){
+            MyTasks(applicationContext).getAll()
+        } else{
+            MyTasks(applicationContext).getAllDone()
         }
     }
 
@@ -363,45 +417,115 @@ class MainActivity : ComponentActivity() {
                 refreshTasks()
             }
         }
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
         ){
-            LazyColumn(
-                contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f)
             ){
-                items(store){
-                    TaskUI(it)
+                if(store.isEmpty()){
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ){
+                        Column() {
+                            Text(
+                                "No tasks yet",
+                                color = Color.Gray
+                            )
+                            TextButton(
+                                onClick = {
+                                    navController.navigate("add")
+                                }
+                            ) {
+                                Text("Add one")
+                            }
+                        }
+
+                    }
+
+                }
+                else{
+                    LazyColumn(
+                        contentPadding = PaddingValues(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                    ){
+                        items(store){
+                            TaskUI(it)
+                        }
+                    }
+                }
+
+
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ){
+                val scope = rememberCoroutineScope()
+                Button(
+                    onClick = {
+                        pending.value = true
+                        scope.launch(Dispatchers.IO) {
+                            refreshTasks()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if(pending.value) Color.Blue else Color.Gray,
+                        contentColor = if(pending.value) Color.White else Color.Blue
+                    )
+                ) {
+                    Text("Pending")
+                }
+                FloatingActionButton(
+                    onClick = {
+                        navController.navigate("add")
+                    },
+                    shape = CircleShape,
+                    containerColor = Color(0xff00C14D),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "",
+                        tint = Color.White
+                    )
+                }
+                Button(
+                    onClick = {
+                        pending.value = false
+                        scope.launch(Dispatchers.IO) {
+                            refreshTasks()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if(pending.value) Color.Gray else Color.Blue,
+                        contentColor = if(pending.value) Color.Blue else Color.White
+                    )
+                ) {
+                    Text("Done")
                 }
             }
-            FloatingActionButton(
-                onClick = {
-                    navController.navigate("add")
-                },
-                shape = CircleShape,
-                containerColor = Color(0xff00C14D),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "",
-                    tint = Color.White
-                )
-            }
         }
-
     }
 
     private fun refreshTasks() {
         store.clear()
-        store.addAll(getTasksDatabase())
+        store.addAll(getTasksFromDatabase())
     }
 
     @Composable
     private fun TaskUI(task: Task) {
+        val scope = rememberCoroutineScope()
         Column(
             modifier = Modifier
                 .shadow(
@@ -425,9 +549,15 @@ class MainActivity : ComponentActivity() {
                     color = Color(0xff00C14D),
                     fontWeight = FontWeight.Bold
                 )
+
                 Checkbox(
-                    checked = false,
-                    onCheckedChange = {}
+                    checked = task.done,
+                    onCheckedChange = {
+                        scope.launch(Dispatchers.IO) {
+                            MyTasks(applicationContext).update(task.apply { done = !done })
+                            refreshTasks()
+                        }
+                    }
                 )
             }
             Text(
@@ -436,7 +566,7 @@ class MainActivity : ComponentActivity() {
                 color = Color.Black
             )
             Spacer(modifier = Modifier.height(12.dp))
-            val scope = rememberCoroutineScope()
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
@@ -463,7 +593,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 Text(
-                    "2nd July, 2023",
+                    task.date,
                     fontSize = 12.sp,
                     color = Color.Blue
                 )
