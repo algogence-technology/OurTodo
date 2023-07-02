@@ -1,5 +1,7 @@
 package com.algogence.ourtodo
 
+import android.app.Activity
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +17,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -32,12 +35,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,8 +61,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -68,14 +75,18 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.room.Room
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.airbnb.lottie.compose.rememberLottieComposition
+import com.algogence.ourtodo.database.AppDatabase
 import com.algogence.ourtodo.mypackage.Task
 import com.algogence.ourtodo.ui.theme.OurTodoTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -89,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = Color.White//MaterialTheme.colorScheme.background
                 ) {
                     Column(){
                         val navController = rememberNavController()
@@ -107,9 +118,17 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun SplashPage(navController: NavHostController) {
+        val context = LocalContext.current
         LaunchedEffect(key1 = Unit){
             delay(1700)
-            navController.navigate("intro")
+            val sharedPref = (context as Activity).getPreferences(Context.MODE_PRIVATE)
+            val introDone = sharedPref.getBoolean("introDone", false)
+            if(introDone){
+                navController.navigate("home")
+            }
+            else{
+                navController.navigate("intro")
+            }
         }
         Box(
             contentAlignment = Alignment.Center
@@ -180,13 +199,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
             Spacer(modifier = Modifier.height(50.dp))
-            Button(onClick = {
-                navController.navigate("home")
-            }) {
+            val context = LocalContext.current
+            Button(
+                onClick = {
+                    navController.navigate("home")
+                    saveIntroDone(context)
+                }
+            ) {
                 Text(if(introSeen) "Get Started" else "Skip")
             }
         }
 
+    }
+
+    private fun saveIntroDone(context: Context) {
+        val sharedPref = (context as Activity).getPreferences(Context.MODE_PRIVATE)
+        with (sharedPref.edit()) {
+            putBoolean("introDone", true)
+            apply()
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -266,6 +297,7 @@ class MainActivity : ComponentActivity() {
                     Text("Description")
                 }
             )
+            val scope = rememberCoroutineScope()
             Button(
                 enabled = canProceed,
                 modifier = Modifier
@@ -274,7 +306,11 @@ class MainActivity : ComponentActivity() {
                     .height(70.dp)
                     .padding(top = 20.dp),
                 onClick = {
-                    store.add(Task(++iid.value, title, description))
+                    //store.add(Task(++iid.value, title, description))
+                    scope.launch(Dispatchers.IO) {
+                        saveTaskToDatabase(Task(++iid.value, title, description))
+                    }
+
                     navController.popBackStack()
                 },
                 shape = RoundedCornerShape(30.dp),
@@ -291,33 +327,52 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun saveTaskToDatabase(task: Task) {
+        val db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "taskDatabase"
+        ).build()
+
+        val taskDao = db.taskDao()
+        val dbTask = com.algogence.ourtodo.database.Task(
+            title = task.title,
+            description = task.description,
+            date = "02-07-2023",
+            done = false
+        )
+        taskDao.insert(dbTask)
+    }
+
+    private fun getTasksDatabase(): List<Task> {
+        val db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "taskDatabase"
+        ).build()
+
+        val taskDao = db.taskDao()
+        val dbTasks = taskDao.getAll()
+        return dbTasks.map {
+            Task(it.id,it.title,it.description)
+        }
+    }
+
     @Composable
     fun HomePage(navController: NavHostController) {
+        LaunchedEffect(key1 = Unit){
+            withContext(Dispatchers.IO){
+                refreshTasks()
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
         ){
             LazyColumn(
-
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ){
                 items(store){
-                    Row(){
-                        Text(
-                            it.title + ":" + it.description,
-                            fontSize = 24.sp,
-                            color = Color.Blue
-                        )
-                        Button(onClick = {
-                            val id = it.id
-                            val item = store.find {
-                                it.id == id
-                            }
-                            store.remove(item)
-                        }) {
-                            Text("Delete")
-                        }
-                    }
-
+                    TaskUI(it)
                 }
             }
             FloatingActionButton(
@@ -338,6 +393,104 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    }
+
+    private fun refreshTasks() {
+        store.clear()
+        store.addAll(getTasksDatabase())
+    }
+
+    @Composable
+    private fun TaskUI(task: Task) {
+        Column(
+            modifier = Modifier
+                .shadow(
+                    2.dp,
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.White)
+                .padding(24.dp)
+        ){
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    task.title.capitalize(),
+                    fontSize = 24.sp,
+                    color = Color(0xff00C14D),
+                    fontWeight = FontWeight.Bold
+                )
+                Checkbox(
+                    checked = false,
+                    onCheckedChange = {}
+                )
+            }
+            Text(
+                task.description,
+                fontSize = 18.sp,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            val scope = rememberCoroutineScope()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                IconButton(
+                    onClick = {
+                        val id = task.id
+                        val item = store.find {
+                            it.id == id
+                        }
+                        //store.remove(item)
+                        scope.launch(Dispatchers.IO) {
+                            deleteTask(item)
+                        }
+                    },
+                    modifier = Modifier
+                        .size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = ""
+                    )
+                }
+                Text(
+                    "2nd July, 2023",
+                    fontSize = 12.sp,
+                    color = Color.Blue
+                )
+            }
+
+        }
+    }
+
+    private fun deleteTask(item: Task?) {
+        if(item==null){
+            return
+        }
+        val db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "taskDatabase"
+        ).build()
+
+        val taskDao = db.taskDao()
+        val dbTask = com.algogence.ourtodo.database.Task(
+            item.id,
+            item.title,
+            item.description,
+            "02-07-2023",
+            false
+        )
+        taskDao.delete(dbTask)
+        refreshTasks()
     }
 
     @Composable
@@ -485,3 +638,18 @@ fun Loader() {
 // floating action button
 // derived state of
 // button enable/disable
+
+// check box padding, icon button ripple effect, capitalize alternative
+
+// room
+// kapt
+
+// sharedPreference
+
+// coroutine
+
+
+
+// shadow
+// checkbox
+// theme
