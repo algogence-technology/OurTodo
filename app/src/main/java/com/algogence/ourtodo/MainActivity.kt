@@ -560,6 +560,8 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+
+
             Text(
                 task.description,
                 fontSize = 18.sp,
